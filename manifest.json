@@ -1,0 +1,17 @@
+{
+  "name": "3D Oscilloscope RF Generator",
+  "short_name": "3D Osc",
+  "description": "3D sound factory with piano, synthesizer, waveform generator, and binaural beats",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#0a0a12",
+  "theme_color": "#0a0a12",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect width='192' height='192' fill='%230a0a12'/%3E%3Ctext x='96' y='130' font-size='100' text-anchor='middle' fill='%2300ffe7'%3E⌾%3C/text%3E%3C/svg%3E",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
+    }
+  ]
+}

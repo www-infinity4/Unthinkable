@@ -97,6 +97,17 @@ class SignalEngine {
     this.messageLog = [];
 
     this._lastAutoTime = 0;
+
+    /* Synthesizer / ADSR (affects piano; future: signal gen) */
+    this.synth = {
+      attack:     0.006,
+      decay:      0.18,
+      sustain:    0.32,
+      release:    0.45,
+      filterType: 'none',   // 'none' | 'lowpass' | 'highpass' | 'bandpass'
+      filterFreq: 2000,
+      filterQ:    1.0,
+    };
   }
 
   /** Compute one sample for the given absolute time (seconds) */
@@ -230,6 +241,8 @@ class AudioEngine {
     this.fmOsc     = null;
     this.fmGain    = null;
     this.analyser  = null;
+    this.masterGain = null;
+    this.masterVolume = 0.8;
     this.playing   = false;
     this.binauralL = null;
     this.binauralR = null;
@@ -242,7 +255,10 @@ class AudioEngine {
     this.ctx = new (window.AudioContext || window.webkitAudioContext)();
     this.analyser = this.ctx.createAnalyser();
     this.analyser.fftSize = 2048;
-    this.analyser.connect(this.ctx.destination);
+    this.masterGain = this.ctx.createGain();
+    this.masterGain.gain.value = this.masterVolume;
+    this.analyser.connect(this.masterGain);
+    this.masterGain.connect(this.ctx.destination);
   }
 
   _waveTypeFor(wave) {
@@ -388,3 +404,170 @@ window.AudioEngine  = AudioEngine;
 window.Waveforms    = Waveforms;
 window.PRESETS      = PRESETS;
 window.AUTOPILOT_SEQUENCES = AUTOPILOT_SEQUENCES;
+
+/* ═══════════════════════════════════════════════
+   PIANO ENGINE — High-quality piano tones
+   Uses a custom PeriodicWave + ADSR envelope
+═══════════════════════════════════════════════ */
+function _buildPianoWave(ctx) {
+  /* Harmonic amplitudes approximating a piano timbre */
+  const real = new Float32Array([
+    0, 1, 0.50, 0.25, 0.14, 0.08, 0.04, 0.02, 0.012, 0.007,
+    0.004, 0.002, 0.001, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  ]);
+  const imag = new Float32Array(32);
+  return ctx.createPeriodicWave(real, imag, { disableNormalization: false });
+}
+
+class PianoEngine {
+  constructor() {
+    this._ae     = null;
+    this._wave   = null;
+    this._active = {};  // noteId → { osc1, osc2, g2, env }
+  }
+
+  /** Attach to AudioEngine — must be called before first noteOn */
+  init(audioEngine) {
+    this._ae = audioEngine;
+    audioEngine._init();
+    this._wave = _buildPianoWave(audioEngine.ctx);
+  }
+
+  noteOn(noteId, freq) {
+    if (!this._ae) return;
+    this._ae._init();
+    this._release(noteId, true); // stop duplicate
+
+    const ctx = this._ae.ctx;
+    const now = ctx.currentTime;
+    const se  = this._ae.se;
+
+    /* Amplitude envelope */
+    const env = ctx.createGain();
+    env.gain.setValueAtTime(0.001, now);
+    env.gain.linearRampToValueAtTime(0.90, now + se.synth.attack);
+    env.gain.exponentialRampToValueAtTime(
+      Math.max(0.001, se.synth.sustain),
+      now + se.synth.attack + se.synth.decay
+    );
+    env.connect(this._ae.analyser);
+
+    /* Main oscillator */
+    const osc1 = ctx.createOscillator();
+    osc1.setPeriodicWave(this._wave);
+    osc1.frequency.value = freq;
+    osc1.connect(env);
+    osc1.start(now);
+
+    /* Detuned copy (+1 cent) for warmth */
+    const g2   = ctx.createGain();
+    g2.gain.value = 0.22;
+    const osc2 = ctx.createOscillator();
+    osc2.setPeriodicWave(this._wave);
+    osc2.frequency.value = freq * 1.00058;
+    osc2.connect(g2);
+    g2.connect(env);
+    osc2.start(now);
+
+    this._active[noteId] = { osc1, osc2, g2, env };
+  }
+
+  noteOff(noteId) { this._release(noteId, false); }
+
+  _release(noteId, immediate) {
+    const note = this._active[noteId];
+    if (!note) return;
+    delete this._active[noteId];
+
+    const ctx  = this._ae.ctx;
+    const now  = ctx.currentTime;
+    const dur  = immediate ? 0.008 : this._ae.se.synth.release;
+
+    note.env.gain.cancelScheduledValues(now);
+    note.env.gain.setValueAtTime(note.env.gain.value, now);
+    note.env.gain.exponentialRampToValueAtTime(0.001, now + dur);
+
+    setTimeout(() => {
+      try { note.osc1.stop(); } catch (e) {}
+      try { note.osc2.stop(); } catch (e) {}
+      note.env.disconnect();
+      note.g2.disconnect();
+    }, (dur + 0.05) * 1000);
+  }
+
+  stopAll() {
+    Object.keys(this._active).forEach(id => this._release(id, true));
+  }
+}
+
+/* ═══════════════════════════════════════════════
+   MIC ENGINE — Microphone input + recording
+═══════════════════════════════════════════════ */
+class MicEngine {
+  constructor(audioEngine) {
+    this._ae      = audioEngine;
+    this.stream   = null;
+    this.source   = null;
+    this.recorder = null;
+    this.chunks   = [];
+    this.monitoring = false;
+    this.recording  = false;
+    this.recordings = []; // { blob, url, name, ts }
+  }
+
+  async startMonitor() {
+    if (this.monitoring) return;
+    this._ae._init();
+    this.stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    this.source = this._ae.ctx.createMediaStreamSource(this.stream);
+    this.source.connect(this._ae.analyser);
+    this.monitoring = true;
+  }
+
+  stopMonitor() {
+    if (this.source) { this.source.disconnect(); this.source = null; }
+    if (this.stream) { this.stream.getTracks().forEach(t => t.stop()); this.stream = null; }
+    this.monitoring = false;
+    if (this.recording) this._finaliseRecording('Mic-' + Date.now());
+  }
+
+  async startRecording(name) {
+    if (!this.monitoring) await this.startMonitor();
+    this.chunks = [];
+    const mime = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/ogg';
+    this.recorder = new MediaRecorder(this.stream, { mimeType: mime });
+    this.recorder.ondataavailable = (e) => { if (e.data.size) this.chunks.push(e.data); };
+    this.recorder.start(100);
+    this.recording = true;
+  }
+
+  stopRecording(name) {
+    if (!this.recorder || !this.recording) return;
+    this.recording = false;
+    this.recorder.onstop = () => this._finaliseRecording(name || ('Mic-' + Date.now()));
+    this.recorder.stop();
+  }
+
+  _finaliseRecording(name) {
+    const mime  = this.chunks[0] ? this.chunks[0].type : 'audio/webm';
+    const blob  = new Blob(this.chunks, { type: mime });
+    const url   = URL.createObjectURL(blob);
+    this.recordings.push({ blob, url, name, ts: Date.now() });
+    this.chunks = [];
+  }
+
+  playRecording(rec) {
+    const audio = new Audio(rec.url);
+    audio.play().catch(() => {});
+  }
+
+  downloadRecording(rec) {
+    const a = document.createElement('a');
+    a.href = rec.url;
+    a.download = rec.name + '.webm';
+    a.click();
+  }
+}
+
+window.PianoEngine = PianoEngine;
+window.MicEngine   = MicEngine;

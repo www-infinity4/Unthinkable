@@ -27,12 +27,13 @@ html, body {
 
 #app {
   display: grid;
-  grid-template-rows: 48px 1fr 180px;
+  grid-template-rows: 48px 38px 1fr 180px;
   grid-template-columns: 220px 1fr 240px;
   grid-template-areas:
-    "header header header"
-    "left   canvas right"
-    "bottom bottom bottom";
+    "header  header  header"
+    "wavebar wavebar wavebar"
+    "left    canvas  right"
+    "bottom  bottom  bottom";
   width: 100vw;
   height: 100vh;
   gap: 0;
@@ -308,11 +309,253 @@ input[type=number]:focus, input[type=text]:focus, select:focus, textarea:focus {
 @media (max-width: 800px) {
   #app {
     grid-template-columns: 0 1fr 0;
-    grid-template-rows: 48px 1fr 220px;
+    grid-template-rows: 48px 38px 1fr 220px;
     grid-template-areas:
-      "header header header"
-      "canvas canvas canvas"
-      "bottom bottom bottom";
+      "header  header  header"
+      "wavebar wavebar wavebar"
+      "canvas  canvas  canvas"
+      "bottom  bottom  bottom";
   }
   #panel-left, #panel-right { display: none; }
 }
+
+/* ── Waveform Scroll Bar ──────────────────────────── */
+#wavebar {
+  grid-area: wavebar;
+  background: #0c0c1a;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  gap: 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+#wavebar::-webkit-scrollbar { display: none; }
+
+.wavebar-label {
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: var(--muted);
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+#wavebar-scroll {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.wavebar-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: var(--radius);
+  padding: 3px 12px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+  white-space: nowrap;
+  transition: all .15s;
+  flex-shrink: 0;
+  line-height: 1.6;
+}
+.wavebar-btn:hover  { border-color: var(--accent); color: var(--accent); }
+.wavebar-btn.active { border-color: var(--accent2); color: var(--accent2); background: rgba(255,0,204,.1); }
+
+/* ── Hamburger Menu ───────────────────────────────── */
+#hamburger-menu {
+  position: fixed;
+  top: 48px;
+  left: 0;
+  width: 260px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-top: none;
+  border-radius: 0 0 var(--radius) 0;
+  z-index: 300;
+  padding: 10px;
+  display: none;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow: 4px 8px 24px rgba(0,0,0,.6);
+}
+#hamburger-menu.open { display: flex; }
+
+.menu-link {
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 12px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  transition: background .2s;
+  display: block;
+}
+.menu-link:hover { background: #1a1a30; border-color: var(--accent); }
+
+.menu-divider { border-top: 1px solid var(--border); margin: 2px 0; }
+
+.menu-item { display: flex; flex-direction: column; gap: 2px; }
+
+/* ── Swipe-Up Drawer ──────────────────────────────── */
+/*
+ * Drawer geometry:
+ *   total height  = 564px  (drawer-body content + handle)
+ *   handle height =  44px  (always visible tab)
+ *   hidden offset = total - handle = 520px
+ * When .open: bottom:0  (fully visible)
+ * When closed: bottom: calc(-520px + 44px) = -476px ← only handle peeks out
+ */
+#swipe-drawer {
+  position: fixed;
+  bottom: calc(-520px + 44px);  /* only handle visible when closed */
+  left: 0;
+  right: 0;
+  height: 564px;
+  background: var(--panel);
+  border-top: 2px solid var(--accent);
+  border-radius: 16px 16px 0 0;
+  z-index: 200;
+  transition: bottom .35s cubic-bezier(.4, 0, .2, 1);
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 -8px 32px rgba(0,0,0,.6);
+}
+#swipe-drawer.open { bottom: 0; }
+
+#drawer-handle {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 16px 6px;
+  cursor: pointer;
+  flex-shrink: 0;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.drawer-bar {
+  width: 44px;
+  height: 4px;
+  background: var(--muted);
+  border-radius: 2px;
+  margin-bottom: 4px;
+  transition: background .2s;
+}
+#drawer-handle:hover .drawer-bar { background: var(--accent); }
+.drawer-title {
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+#drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.drawer-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+@media (max-width: 600px) {
+  .drawer-grid { grid-template-columns: 1fr; }
+}
+
+.drawer-col {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* ── Piano Keyboard ───────────────────────────────── */
+#piano-keyboard {
+  position: relative;
+  height: 130px;
+  display: flex;
+  align-items: stretch;
+  background: #0a0a0a;
+  border: 1px solid var(--border);
+  border-radius: 0 0 8px 8px;
+  overflow: visible;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+  flex-shrink: 0;
+}
+
+.piano-white-key {
+  flex: 1;
+  position: relative;
+  background: linear-gradient(to bottom, #d8d8d8 0%, #fff 60%);
+  border: 1px solid #555;
+  border-top: none;
+  border-radius: 0 0 6px 6px;
+  cursor: pointer;
+  z-index: 1;
+  min-width: 0;
+  padding: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 5px;
+  transition: background .04s;
+  outline: none;
+}
+.piano-white-key.pressed,
+.piano-white-key:active {
+  background: linear-gradient(to bottom, #00ffe7 0%, #009e91 100%);
+}
+
+.piano-black-key {
+  position: absolute;
+  top: 0;
+  height: 62%;
+  background: linear-gradient(to bottom, #333 0%, #000 100%);
+  border: 1px solid #000;
+  border-top: none;
+  border-radius: 0 0 5px 5px;
+  cursor: pointer;
+  z-index: 2;
+  transition: background .04s;
+  outline: none;
+}
+.piano-black-key.pressed,
+.piano-black-key:active {
+  background: linear-gradient(to bottom, #444 0%, #1a1a1a 100%);
+}
+
+.piano-key-label {
+  font-size: 7px;
+  color: #888;
+  font-family: 'Courier New', monospace;
+  pointer-events: none;
+}
+
+/* ── Pinned sound buttons ─────────────────────────── */
+.pinned-btn {
+  font-size: 11px;
+  padding: 3px 8px;
+  border: 1px solid var(--accent2);
+  border-radius: 12px;
+  background: rgba(255,0,204,.08);
+  color: var(--accent2);
+  cursor: pointer;
+  transition: all .2s;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.pinned-btn:hover { background: rgba(255,0,204,.2); }
+.pinned-btn .unpin { font-size: 10px; color: var(--muted); background: none; border: none; cursor: pointer; padding: 0 0 0 2px; }
