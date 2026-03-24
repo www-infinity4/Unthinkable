@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>3D Oscilloscope RF Generator</title>
+  <link rel="stylesheet" href="src/css/style.css" />
+  <!-- Three.js r128 — vendored at src/vendor/three.min.js (no CDN dependency) -->
+  <script src="src/vendor/three.min.js"></script>
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ══════════════ HEADER ══════════════ -->
+  <header id="header">
+    <h1>⌾ 3D OSCILLOSCOPE RF GEN</h1>
+    <span id="badge-rec"  class="badge">● REC</span>
+    <span id="badge-play" class="badge">▶ PLAY</span>
+    <span id="badge-auto" class="badge">⚡ AUTO</span>
+    <div class="spacer"></div>
+    <!-- View toggles -->
+    <button class="header-btn active" id="toggle-wave"   title="Toggle waveform line">〜 WAVE</button>
+    <button class="header-btn active" id="toggle-trail"  title="Toggle 3D Lissajous trail">◎ TRAIL</button>
+    <button class="header-btn active" id="toggle-bars"   title="Toggle frequency bars">▌FREQ</button>
+    <button class="header-btn active" id="toggle-rotate" title="Toggle auto-rotate">↺ AUTO</button>
+    <select id="color-mode" title="Colour mode" style="width:100px;">
+      <option value="spectrum">Spectrum</option>
+      <option value="phase">Phase</option>
+      <option value="solid">Solid</option>
+    </select>
+    <button class="header-btn" id="btn-reset-cam">⌂ RESET CAM</button>
+  </header>
+
+  <!-- ══════════════ LEFT PANEL ══════════════ -->
+  <aside id="panel-left">
+
+    <div class="section-title">Signal Generator</div>
+
+    <!-- Frequency -->
+    <div class="control-row">
+      <label>Freq</label>
+      <input type="range" id="sl-freq" min="1" max="4.301" step="0.001" value="2.643" />
+      <span  class="val"  id="val-freq">440 Hz</span>
+    </div>
+    <div class="control-row">
+      <label>Freq (Hz)</label>
+      <input type="number" id="num-freq" value="440" min="1" max="20000" step="0.1" style="flex:1;" />
+    </div>
+
+    <!-- Amplitude -->
+    <div class="control-row">
+      <label>Amplitude</label>
+      <input type="range" id="sl-amp" min="0" max="1" step="0.01" value="0.7" />
+      <span  class="val"  id="val-amp">0.70</span>
+    </div>
+
+    <!-- FM depth -->
+    <div class="control-row">
+      <label>FM Depth</label>
+      <input type="range" id="sl-fm" min="0" max="500" step="1" value="0" />
+      <span  class="val"  id="val-fm">0 Hz</span>
+    </div>
+
+    <!-- AM depth -->
+    <div class="control-row">
+      <label>AM Depth</label>
+      <input type="range" id="sl-am" min="0" max="1" step="0.01" value="0" />
+      <span  class="val"  id="val-am">0.00</span>
+    </div>
+
+    <!-- Modulation frequency -->
+    <div class="control-row">
+      <label>Mod Freq</label>
+      <input type="range" id="sl-modfreq" min="0.1" max="200" step="0.1" value="5" />
+      <span  class="val"  id="val-modfreq">5.0 Hz</span>
+    </div>
+
+    <!-- Waveform picker -->
+    <div class="section-title" style="margin-top:8px;">Waveform</div>
+    <div class="btn-group" id="wave-btns"></div>
+
+    <!-- Signal Presets -->
+    <div class="section-title" style="margin-top:8px;">Presets</div>
+    <div class="preset-grid" id="preset-grid"></div>
+
+  </aside>
+
+  <!-- ══════════════ 3D CANVAS ══════════════ -->
+  <main id="canvas-wrap">
+    <canvas id="three-canvas"></canvas>
+    <div id="overlay-hud">
+      Freq: <span id="hud-freq">440 Hz</span><br/>
+      Wave: <span id="hud-wave">sine</span><br/>
+      Amp:  <span id="hud-amp">0.70</span><br/>
+      Mod:  <span id="hud-fm">---</span>
+    </div>
+  </main>
+
+  <!-- ══════════════ RIGHT PANEL ══════════════ -->
+  <aside id="panel-right">
+
+    <div class="section-title">Saved Signals</div>
+    <div class="control-row">
+      <input type="text" id="record-name" placeholder="Signal name…" style="flex:1;" />
+    </div>
+    <div id="signal-list"></div>
+
+    <div class="control-row" style="margin-top:6px; gap:4px;">
+      <button class="btn" id="btn-export" title="Export all signals as JSON">⬇ Export</button>
+      <button class="btn" id="btn-import" title="Import signals from JSON">⬆ Import</button>
+      <button class="btn danger" id="btn-clear-signals" title="Clear all saved signals">✕ Clear</button>
+    </div>
+
+    <div class="section-title" style="margin-top:8px;">Annotations</div>
+    <div class="control-row">
+      <input type="text" id="annotate-label" placeholder="Label text…" style="flex:1;" />
+      <button class="btn" id="btn-annotate">📍 Mark</button>
+    </div>
+    <div style="font-size:10px; color:var(--muted); margin-top:2px; padding-left:4px;">
+      Marks the current 3D position with a glowing sphere (auto-removes after 8 s).
+    </div>
+
+    <div class="section-title" style="margin-top:8px;">Message Log</div>
+    <div id="msg-log"></div>
+
+    <div class="section-title" style="margin-top:8px;">Spectrum (2D)</div>
+    <canvas id="spectrum-canvas"></canvas>
+
+  </aside>
+
+  <!-- ══════════════ BOTTOM TRANSPORT ══════════════ -->
+  <footer id="panel-bottom">
+    <button class="btn" id="btn-play"      style="min-width:80px;">▶ PLAY</button>
+    <button class="btn" id="btn-stop"      style="min-width:80px;">⏹ STOP</button>
+    <button class="btn" id="btn-record"    style="min-width:110px;">⏺ RECORD</button>
+    <button class="btn" id="btn-autopilot" style="min-width:110px;">⚡ AUTOPILOT</button>
+
+    <div style="border-left:1px solid var(--border); height:24px; margin: 0 6px;"></div>
+
+    <label style="font-size:11px; color:var(--muted);">Auto Duration:</label>
+    <select id="auto-duration" style="width:90px;">
+      <option value="2000">2 s</option>
+      <option value="4000" selected>4 s</option>
+      <option value="8000">8 s</option>
+      <option value="16000">16 s</option>
+      <option value="30000">30 s</option>
+    </select>
+
+    <div style="border-left:1px solid var(--border); height:24px; margin: 0 6px;"></div>
+
+    <span style="font-size:11px; color:var(--muted);">
+      Drag 3D view to orbit · Scroll to zoom · Click presets to switch signals
+    </span>
+    <div class="spacer"></div>
+    <span style="font-size:10px; color:var(--muted);">
+      3D Oscilloscope RF Generator · Web Audio API + Three.js
+    </span>
+  </footer>
+
+</div><!-- #app -->
+
+<!-- App scripts (order matters) -->
+<script src="src/js/signal.js"></script>
+<script src="src/js/renderer.js"></script>
+<script src="src/js/app.js"></script>
+</body>
+</html>
