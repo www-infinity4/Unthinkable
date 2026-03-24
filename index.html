@@ -3,6 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0a0a12" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="manifest" href="manifest.json" />
   <title>3D Oscilloscope RF Generator</title>
   <link rel="stylesheet" href="src/css/style.css" />
   <!-- Three.js r128 — vendored at src/vendor/three.min.js (no CDN dependency) -->
@@ -14,6 +19,7 @@
 
   <!-- ══════════════ HEADER ══════════════ -->
   <header id="header">
+    <button id="hamburger-btn" class="header-btn" title="Menu" aria-label="Open menu">☰</button>
     <h1>⌾ 3D OSCILLOSCOPE RF GEN</h1>
     <span id="badge-rec"  class="badge">● REC</span>
     <span id="badge-play" class="badge">▶ PLAY</span>
@@ -32,7 +38,11 @@
     <button class="header-btn" id="btn-reset-cam">⌂ RESET CAM</button>
   </header>
 
-  <!-- ══════════════ LEFT PANEL ══════════════ -->
+  <!-- ══════════════ WAVEFORM SCROLL BAR ══════════════ -->
+  <div id="wavebar" role="toolbar" aria-label="Waveform selector">
+    <span class="wavebar-label">WAVE:</span>
+    <div id="wavebar-scroll"></div>
+  </div>
   <aside id="panel-left">
 
     <div class="section-title">Signal Generator</div>
@@ -134,7 +144,9 @@
     <button class="btn" id="btn-play"      style="min-width:80px;">▶ PLAY</button>
     <button class="btn" id="btn-stop"      style="min-width:80px;">⏹ STOP</button>
     <button class="btn" id="btn-record"    style="min-width:110px;">⏺ RECORD</button>
+    <button class="btn" id="btn-mic-rec"   style="min-width:110px;">🎤 MIC REC</button>
     <button class="btn" id="btn-autopilot" style="min-width:110px;">⚡ AUTOPILOT</button>
+    <button class="btn" id="btn-drawer"    style="min-width:80px;">⬆ MORE</button>
 
     <div style="border-left:1px solid var(--border); height:24px; margin: 0 6px;"></div>
 
@@ -160,7 +172,144 @@
 
 </div><!-- #app -->
 
-<!-- App scripts (order matters) -->
+<!-- ══════════════ HAMBURGER MENU ══════════════ -->
+<div id="hamburger-menu" role="dialog" aria-label="Navigation menu">
+  <a class="menu-link" href="https://github.com/www-infinity3/3d-Oscilloscope" target="_blank" rel="noopener">
+    🔗 3D Oscilloscope (www-infinity3)
+  </a>
+  <a class="menu-link" href="https://github.com/www-infinity4/Unthinkable" target="_blank" rel="noopener">
+    📂 This Repo (www-infinity4)
+  </a>
+  <div class="menu-divider"></div>
+  <div class="menu-item">
+    <span style="font-size:10px;color:var(--muted);">MASTER VOLUME</span>
+    <div class="control-row" style="margin:4px 0 0;">
+      <input type="range" id="sl-master-vol" min="0" max="1" step="0.01" value="0.8" style="flex:1;" />
+      <span class="val" id="val-master-vol">0.80</span>
+    </div>
+  </div>
+  <div class="menu-item">
+    <label style="font-size:10px;color:var(--muted);">INSTALL APP (Android/PWA)</label>
+    <button class="btn" id="btn-pwa-install" style="margin-top:4px;width:100%;">📲 Add to Home Screen</button>
+  </div>
+</div>
+
+<!-- ══════════════ SWIPE-UP DRAWER ══════════════ -->
+<div id="swipe-drawer" aria-label="Extra controls">
+
+  <!-- Handle — always visible at bottom of screen -->
+  <div id="drawer-handle" role="button" tabindex="0" aria-label="Toggle extra controls">
+    <div class="drawer-bar"></div>
+    <span class="drawer-title" id="drawer-title-txt">⬆ SWIPE UP · MORE CONTROLS</span>
+  </div>
+
+  <!-- Scrollable body -->
+  <div id="drawer-body">
+
+    <div class="drawer-grid">
+
+      <!-- LEFT column: quick sliders + mic -->
+      <div class="drawer-col">
+        <div class="section-title">Quick Controls</div>
+
+        <div class="control-row">
+          <label>Freq</label>
+          <input type="range" id="dr-freq" min="1" max="4.301" step="0.001" value="2.643" />
+          <span class="val" id="dr-val-freq">440 Hz</span>
+        </div>
+        <div class="control-row">
+          <label>Amplitude</label>
+          <input type="range" id="dr-amp" min="0" max="1" step="0.01" value="0.7" />
+          <span class="val" id="dr-val-amp">0.70</span>
+        </div>
+        <div class="control-row">
+          <label>Volume</label>
+          <input type="range" id="dr-vol" min="0" max="1" step="0.01" value="0.8" />
+          <span class="val" id="dr-val-vol">0.80</span>
+        </div>
+        <div class="control-row">
+          <label>FM Depth</label>
+          <input type="range" id="dr-fm" min="0" max="500" step="1" value="0" />
+          <span class="val" id="dr-val-fm">0 Hz</span>
+        </div>
+        <div class="control-row">
+          <label>AM Depth</label>
+          <input type="range" id="dr-am" min="0" max="1" step="0.01" value="0" />
+          <span class="val" id="dr-val-am">0.00</span>
+        </div>
+
+        <div class="section-title" style="margin-top:10px;">Microphone</div>
+        <div class="control-row" style="gap:6px; flex-wrap:wrap;">
+          <button class="btn" id="btn-mic-listen">🎤 LISTEN</button>
+          <button class="btn" id="btn-mic-record-dr">⏺ REC</button>
+          <button class="btn danger" id="btn-mic-stop">⏹ STOP</button>
+        </div>
+        <div id="mic-status" style="font-size:10px;color:var(--muted);margin-top:4px;"></div>
+        <div id="mic-recordings-list" style="margin-top:6px;display:flex;flex-direction:column;gap:4px;max-height:100px;overflow-y:auto;"></div>
+      </div>
+
+      <!-- RIGHT column: synthesizer ADSR + sound factory -->
+      <div class="drawer-col">
+        <div class="section-title">Piano / Synth ADSR</div>
+
+        <div class="control-row">
+          <label>Attack</label>
+          <input type="range" id="dr-attack" min="0.001" max="2" step="0.001" value="0.006" />
+          <span class="val" id="dr-val-attack">0.006s</span>
+        </div>
+        <div class="control-row">
+          <label>Decay</label>
+          <input type="range" id="dr-decay" min="0.001" max="2" step="0.001" value="0.18" />
+          <span class="val" id="dr-val-decay">0.18s</span>
+        </div>
+        <div class="control-row">
+          <label>Sustain</label>
+          <input type="range" id="dr-sustain" min="0" max="1" step="0.01" value="0.32" />
+          <span class="val" id="dr-val-sustain">0.32</span>
+        </div>
+        <div class="control-row">
+          <label>Release</label>
+          <input type="range" id="dr-release" min="0.01" max="3" step="0.01" value="0.45" />
+          <span class="val" id="dr-val-release">0.45s</span>
+        </div>
+        <div class="control-row">
+          <label>Filter</label>
+          <select id="dr-filter-type" style="flex:1;">
+            <option value="none">None</option>
+            <option value="lowpass">Low Pass</option>
+            <option value="highpass">High Pass</option>
+            <option value="bandpass">Band Pass</option>
+          </select>
+        </div>
+        <div class="control-row" id="dr-filter-row" style="display:none;">
+          <label>Cutoff</label>
+          <input type="range" id="dr-filter-freq" min="20" max="20000" step="10" value="2000" />
+          <span class="val" id="dr-val-filter-freq">2kHz</span>
+        </div>
+
+        <div class="section-title" style="margin-top:10px;">Sound Factory</div>
+        <div class="control-row" style="gap:4px;">
+          <select id="sound-dropdown" style="flex:1;font-size:11px;"></select>
+          <button class="btn" id="btn-apply-sound" title="Apply selected sound">▶</button>
+          <button class="btn" id="btn-pin-sound"   title="Pin as button (or auto-pins at 11 uses)">📌</button>
+        </div>
+        <div style="font-size:10px;color:var(--muted);margin:2px 0 6px 4px;">Auto-pins after 11 uses · 📌 to pin now</div>
+        <div id="pinned-sounds" style="display:flex;flex-wrap:wrap;gap:4px;"></div>
+      </div>
+    </div><!-- .drawer-grid -->
+
+    <!-- PIANO — full width -->
+    <div class="section-title" style="margin:10px 0 4px;">Piano · Best Quality · Click / Touch to Play</div>
+    <div id="piano-oct-controls" style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+      <button class="btn" id="btn-oct-down">◄ OCT</button>
+      <span id="piano-oct-label" style="font-size:11px;color:var(--muted);">Oct 4–5</span>
+      <button class="btn" id="btn-oct-up">OCT ►</button>
+      <span style="font-size:10px;color:var(--muted);margin-left:auto;">Touch &amp; hold for sustained note</span>
+    </div>
+    <div id="piano-keyboard" aria-label="Piano keyboard"></div>
+
+  </div><!-- #drawer-body -->
+</div><!-- #swipe-drawer -->
 <script src="src/js/signal.js"></script>
 <script src="src/js/renderer.js"></script>
 <script src="src/js/app.js"></script>
