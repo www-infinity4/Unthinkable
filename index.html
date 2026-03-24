@@ -313,5 +313,61 @@
 <script src="src/js/signal.js"></script>
 <script src="src/js/renderer.js"></script>
 <script src="src/js/app.js"></script>
+
+<!-- ══════════════ UPDATE TOAST ══════════════ -->
+<div id="sw-update-toast" style="
+  display:none; position:fixed; bottom:72px; left:50%; transform:translateX(-50%);
+  background:var(--panel,#12121e); border:1px solid var(--accent,#00ffe7);
+  color:var(--fg,#e0e0ff); padding:10px 18px; border-radius:8px; z-index:9999;
+  font-size:12px; gap:10px; align-items:center; box-shadow:0 2px 12px #00ffe740;">
+  <span>⬆ New version available</span>
+  <button id="sw-update-btn" style="
+    background:var(--accent,#00ffe7); color:#0a0a12; border:none; border-radius:4px;
+    padding:4px 10px; cursor:pointer; font-size:11px; font-weight:700;">Reload</button>
+  <button id="sw-dismiss-btn" style="
+    background:none; border:none; color:var(--muted,#666); cursor:pointer; font-size:14px;
+    line-height:1; padding:0 2px;">✕</button>
+</div>
+
+<script>
+(function () {
+  if (!('serviceWorker' in navigator)) return;
+
+  navigator.serviceWorker.register('sw.js').then(function (reg) {
+    var toast = document.getElementById('sw-update-toast');
+
+    // Wire up toast buttons once
+    document.getElementById('sw-update-btn').addEventListener('click', function () {
+      var wb = reg.waiting;
+      if (wb) wb.postMessage({ type: 'SKIP_WAITING' });
+    });
+    document.getElementById('sw-dismiss-btn').addEventListener('click', function () {
+      if (toast) toast.style.display = 'none';
+    });
+
+    // A new SW is waiting to activate — show the toast
+    function handleWaiting() {
+      if (toast) toast.style.display = 'flex';
+    }
+
+    if (reg.waiting) handleWaiting();
+    reg.addEventListener('updatefound', function () {
+      var newWorker = reg.installing;
+      newWorker.addEventListener('statechange', function () {
+        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+          handleWaiting();
+        }
+      });
+    });
+  }).catch(function (err) {
+    console.warn('Service worker registration failed:', err);
+  });
+
+  // When a new SW takes over, reload to serve fresh content
+  navigator.serviceWorker.addEventListener('controllerchange', function () {
+    window.location.reload();
+  });
+}());
+</script>
 </body>
 </html>
