@@ -86,7 +86,7 @@ class OscilloscopeRenderer {
 
     /* ── Reusable color scratch to avoid per-frame GC ── */
     this._tmpColor = new THREE.Color();
-    this._tc = [0, 0, 0];
+    this._colorBuffer = [0, 0, 0];
 
     /* ── State ── */
     this.showTrail  = true;
@@ -224,7 +224,7 @@ class OscilloscopeRenderer {
     // ── Waveform line (X=time, Y=amplitude, Z=0)
     if (this.showWave) {
       const visibleSamples = Math.floor(bufLen * this.timeZoom);
-      const cb = this._tc;
+      const colorBuffer = this._colorBuffer;
       for (let i = 0; i < N; i++) {
         const srcRaw = Math.floor(i / N * visibleSamples) + triggerOffset;
         const src = Math.min(srcRaw, bufLen - 1);
@@ -234,10 +234,10 @@ class OscilloscopeRenderer {
         this.wavePositions[i*3]   = x;
         this.wavePositions[i*3+1] = y;
         this.wavePositions[i*3+2] = 0;
-        if (this.colorMode === 'spectrum') this._spectrumColor(i / N, cb);
-        else if (this.colorMode === 'phase') this._phaseColor(v, cb);
-        else { cb[0] = this.primaryColor.r; cb[1] = this.primaryColor.g; cb[2] = this.primaryColor.b; }
-        this.waveColors[i*3] = cb[0]; this.waveColors[i*3+1] = cb[1]; this.waveColors[i*3+2] = cb[2];
+        if (this.colorMode === 'spectrum') this._spectrumColor(i / N, colorBuffer);
+        else if (this.colorMode === 'phase') this._phaseColor(v, colorBuffer);
+        else { colorBuffer[0] = this.primaryColor.r; colorBuffer[1] = this.primaryColor.g; colorBuffer[2] = this.primaryColor.b; }
+        this.waveColors[i*3] = colorBuffer[0]; this.waveColors[i*3+1] = colorBuffer[1]; this.waveColors[i*3+2] = colorBuffer[2];
       }
       this.waveLine.geometry.attributes.position.needsUpdate = true;
       this.waveLine.geometry.attributes.color.needsUpdate    = true;
@@ -260,7 +260,7 @@ class OscilloscopeRenderer {
       // Rebuild trail geometry in snake (boustrophedon) pattern
       // Even rows L→R, odd rows R→L — no diagonal jump artefacts at edges
       const Z_STEP = 0.13;
-      const cb = this._tc;
+      const colorBuffer = this._colorBuffer;
       let pi = 0;
       for (let r = 0; r < ROWS; r++) {
         const dataRow = (this._rowHead - r + ROWS) % ROWS;
@@ -279,11 +279,11 @@ class OscilloscopeRenderer {
           this.trailPos[pi*3 + 1] = y;
           this.trailPos[pi*3 + 2] = z;
 
-          if (this.colorMode === 'phase') this._phaseColor(amp, cb);
-          else this._spectrumColor(col / COLS, cb);
-          this.trailColor[pi*3]     = cb[0] * fade;
-          this.trailColor[pi*3 + 1] = cb[1] * fade;
-          this.trailColor[pi*3 + 2] = cb[2] * fade;
+          if (this.colorMode === 'phase') this._phaseColor(amp, colorBuffer);
+          else this._spectrumColor(col / COLS, colorBuffer);
+          this.trailColor[pi*3]     = colorBuffer[0] * fade;
+          this.trailColor[pi*3 + 1] = colorBuffer[1] * fade;
+          this.trailColor[pi*3 + 2] = colorBuffer[2] * fade;
 
           pi++;
         }
