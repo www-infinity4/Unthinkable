@@ -3,7 +3,7 @@
  * Three.js 3D Renderer
  * ─────────────────────────────────────────────
  * Renders an animated 3D waveform tube,
- * a signal trail in XYZ space,
+ * a 3D waterfall signal trail in XYZ space,
  * frequency-domain bars, and grid.
  */
 
@@ -48,7 +48,7 @@ class OscilloscopeRenderer {
     /* ── Grid ── */
     this._buildGrid();
 
-    /* ── Waveform line (2D projection) ── */
+    /* ── Waveform line (X=time, Y=amplitude, Z=0) ── */
     this.WAVE_POINTS = 512;
     this.wavePositions = new Float32Array(this.WAVE_POINTS * 3);
     this.waveColors    = new Float32Array(this.WAVE_POINTS * 3);
@@ -57,17 +57,23 @@ class OscilloscopeRenderer {
     waveGeo.setAttribute('color',    new THREE.BufferAttribute(this.waveColors, 3));
     const waveMat = new THREE.LineBasicMaterial({ vertexColors: true, linewidth: 2 });
     this.waveLine = new THREE.Line(waveGeo, waveMat);
+    this.waveLine.frustumCulled = false;
     this.scene.add(this.waveLine);
 
-    /* ── 3D signal trail (XY Lissajous-style) ── */
-    this.TRAIL_POINTS = 2048;
+    /* ── 3D waterfall trail (waveform history scrolling in -Z) ── */
+    this.TRAIL_COLS   = 64;   // samples per row
+    this.TRAIL_ROWS   = 32;   // time-depth rows (history depth)
+    this.TRAIL_POINTS = this.TRAIL_COLS * this.TRAIL_ROWS; // 2048
+    this._rowData  = new Float32Array(this.TRAIL_ROWS * this.TRAIL_COLS); // amplitude storage
+    this._rowHead  = 0;  // index of newest row in _rowData
     this.trailPos   = new Float32Array(this.TRAIL_POINTS * 3);
     this.trailColor = new Float32Array(this.TRAIL_POINTS * 3);
     const trailGeo = new THREE.BufferGeometry();
     trailGeo.setAttribute('position', new THREE.BufferAttribute(this.trailPos, 3));
     trailGeo.setAttribute('color',    new THREE.BufferAttribute(this.trailColor, 3));
-    const trailMat = new THREE.LineBasicMaterial({ vertexColors: true, linewidth: 1.5, transparent: true, opacity: 0.7 });
+    const trailMat = new THREE.LineBasicMaterial({ vertexColors: true, linewidth: 1.5, transparent: true, opacity: 0.85 });
     this.trailLine = new THREE.Line(trailGeo, trailMat);
+    this.trailLine.frustumCulled = false;
     this.scene.add(this.trailLine);
 
     /* ── Frequency bars ── */
@@ -78,12 +84,19 @@ class OscilloscopeRenderer {
     /* ── Signal annotation spheres ── */
     this.annotations = [];
 
+    /* ── Reusable color scratch to avoid per-frame GC ── */
+    this._tmpColor = new THREE.Color();
+    this._colorBuffer = [0, 0, 0];
+
     /* ── State ── */
     this.showTrail  = true;
     this.showBars   = true;
     this.showWave   = true;
     this.colorMode  = 'spectrum'; // 'spectrum' | 'solid' | 'phase'
     this.primaryColor = new THREE.Color(0x00ffe7);
+    this.triggerEnabled = false;  // zero-crossing trigger for stable display
+    this.yScale     = 1.5;        // amplitude display gain
+    this.timeZoom   = 1.0;        // fraction of buffer shown (0.25–1)
 
     /* ── Resize observer ── */
     this._resizeObserver = new ResizeObserver(() => this._onResize());
@@ -180,73 +193,104 @@ class OscilloscopeRenderer {
 
   /* ── Color helpers ─────────────────────────────── */
   _spectrumColor(t, out) {
-    // Rainbow spectrum based on 0..1 position
-    const h = t * 300 + 180;
-    const c = new THREE.Color(`hsl(${h % 360},100%,60%)`);
-    out[0] = c.r; out[1] = c.g; out[2] = c.b;
+    // Rainbow spectrum — reuse _tmpColor to avoid per-call GC
+    this._tmpColor.setHSL(((t * 300 + 180) % 360) / 360, 1, 0.6);
+    out[0] = this._tmpColor.r; out[1] = this._tmpColor.g; out[2] = this._tmpColor.b;
   }
 
   _phaseColor(v, out) {
-    // Colour based on sample value
-    const c = new THREE.Color();
-    c.setHSL(0.5 + v * 0.3, 1, 0.5 + Math.abs(v) * 0.3);
-    out[0] = c.r; out[1] = c.g; out[2] = c.b;
+    this._tmpColor.setHSL(0.5 + v * 0.3, 1, 0.5 + Math.abs(v) * 0.3);
+    out[0] = this._tmpColor.r; out[1] = this._tmpColor.g; out[2] = this._tmpColor.b;
   }
 
   /* ── Main update ───────────────────────────────── */
   update(waveData, freqData, signalEngine, now) {
-    const N = this.WAVE_POINTS;
+    const N      = this.WAVE_POINTS;
     const bufLen = waveData.length;
-    const t = now !== undefined ? now : performance.now();
+
+    // ── Trigger: find first positive zero-crossing for stable display
+    let triggerOffset = 0;
+    if (this.triggerEnabled) {
+      const searchLen = Math.floor(bufLen * Math.min(this.timeZoom, 1) * 0.5);
+      const searchStart = Math.floor(bufLen * 0.1);
+      const searchEnd   = searchStart + searchLen;
+      for (let i = searchStart; i < searchEnd - 1; i++) {
+        const v0 = waveData[i]   / 128.0 - 1.0;
+        const v1 = waveData[i+1] / 128.0 - 1.0;
+        if (v0 <= 0 && v1 > 0) { triggerOffset = i; break; }
+      }
+    }
 
     // ── Waveform line (X=time, Y=amplitude, Z=0)
     if (this.showWave) {
+      const visibleSamples = Math.floor(bufLen * this.timeZoom);
+      const colorBuffer = this._colorBuffer;
       for (let i = 0; i < N; i++) {
-        const src = Math.floor(i / N * bufLen);
+        const srcRaw = Math.floor(i / N * visibleSamples) + triggerOffset;
+        const src = Math.min(srcRaw, bufLen - 1);
         const v   = (waveData[src] / 128.0) - 1.0;
         const x   = (i / (N - 1)) * 6 - 3;
-        const y   = v * 1.5;
+        const y   = v * this.yScale;
         this.wavePositions[i*3]   = x;
         this.wavePositions[i*3+1] = y;
         this.wavePositions[i*3+2] = 0;
-        const cb = [];
-        if (this.colorMode === 'spectrum') this._spectrumColor(i / N, cb);
-        else if (this.colorMode === 'phase') this._phaseColor(v, cb);
-        else { cb[0] = this.primaryColor.r; cb[1] = this.primaryColor.g; cb[2] = this.primaryColor.b; }
-        this.waveColors[i*3] = cb[0]; this.waveColors[i*3+1] = cb[1]; this.waveColors[i*3+2] = cb[2];
+        if (this.colorMode === 'spectrum') this._spectrumColor(i / N, colorBuffer);
+        else if (this.colorMode === 'phase') this._phaseColor(v, colorBuffer);
+        else { colorBuffer[0] = this.primaryColor.r; colorBuffer[1] = this.primaryColor.g; colorBuffer[2] = this.primaryColor.b; }
+        this.waveColors[i*3] = colorBuffer[0]; this.waveColors[i*3+1] = colorBuffer[1]; this.waveColors[i*3+2] = colorBuffer[2];
       }
       this.waveLine.geometry.attributes.position.needsUpdate = true;
       this.waveLine.geometry.attributes.color.needsUpdate    = true;
-      this.waveLine.geometry.computeBoundingSphere();
     }
     this.waveLine.visible = this.showWave;
 
-    // ── 3D signal trail (Lissajous XYZ)
+    // ── 3D waterfall trail (waveform history scrolling in -Z)
     if (this.showTrail) {
-      const T = this.TRAIL_POINTS;
-      // Shift trail back
-      for (let i = T-1; i > 0; i--) {
-        this.trailPos[i*3]   = this.trailPos[(i-1)*3];
-        this.trailPos[i*3+1] = this.trailPos[(i-1)*3+1];
-        this.trailPos[i*3+2] = this.trailPos[(i-1)*3+2];
-        this.trailColor[i*3]   = this.trailColor[(i-1)*3];
-        this.trailColor[i*3+1] = this.trailColor[(i-1)*3+1];
-        this.trailColor[i*3+2] = this.trailColor[(i-1)*3+2];
+      const COLS = this.TRAIL_COLS;
+      const ROWS = this.TRAIL_ROWS;
+
+      // Advance ring-buffer head and write newest waveform row
+      this._rowHead = (this._rowHead + 1) % ROWS;
+      const rowOff = this._rowHead * COLS;
+      for (let c = 0; c < COLS; c++) {
+        const src = Math.floor(c / COLS * bufLen);
+        this._rowData[rowOff + c] = (waveData[src] / 128.0) - 1.0;
       }
-      // New point: x=sample(t), y=sample(t+π/2), z=sample(t+π) → Lissajous
-      const mid  = Math.floor(bufLen / 2);
-      const qtr  = Math.floor(bufLen / 4);
-      const vX = (waveData[0]   / 128.0 - 1.0) * 1.5;
-      const vY = (waveData[qtr] / 128.0 - 1.0) * 1.5;
-      const vZ = (waveData[mid] / 128.0 - 1.0) * 1.5;
-      this.trailPos[0] = vX; this.trailPos[1] = vY; this.trailPos[2] = vZ;
-      const tc = [];
-      this._spectrumColor((t / 5000) % 1, tc);
-      this.trailColor[0] = tc[0]; this.trailColor[1] = tc[1]; this.trailColor[2] = tc[2];
+
+      // Rebuild trail geometry in snake (boustrophedon) pattern
+      // Even rows L→R, odd rows R→L — no diagonal jump artefacts at edges
+      const Z_STEP = 0.13;
+      const colorBuffer = this._colorBuffer;
+      let pi = 0;
+      for (let r = 0; r < ROWS; r++) {
+        const dataRow = (this._rowHead - r + ROWS) % ROWS;
+        const dOff    = dataRow * COLS;
+        const z       = -r * Z_STEP;
+        const forward = (r % 2 === 0);
+        const fade    = Math.pow(1.0 - r / ROWS, 1.5);
+
+        for (let c = 0; c < COLS; c++) {
+          const col = forward ? c : (COLS - 1 - c);
+          const amp = this._rowData[dOff + col];
+          const x   = (col / (COLS - 1)) * 4 - 2;   // -2 to +2
+          const y   = amp * this.yScale;
+
+          this.trailPos[pi*3]     = x;
+          this.trailPos[pi*3 + 1] = y;
+          this.trailPos[pi*3 + 2] = z;
+
+          if (this.colorMode === 'phase') this._phaseColor(amp, colorBuffer);
+          else this._spectrumColor(col / COLS, colorBuffer);
+          this.trailColor[pi*3]     = colorBuffer[0] * fade;
+          this.trailColor[pi*3 + 1] = colorBuffer[1] * fade;
+          this.trailColor[pi*3 + 2] = colorBuffer[2] * fade;
+
+          pi++;
+        }
+      }
 
       this.trailLine.geometry.attributes.position.needsUpdate = true;
       this.trailLine.geometry.attributes.color.needsUpdate    = true;
-      this.trailLine.geometry.computeBoundingSphere();
     }
     this.trailLine.visible = this.showTrail;
 
@@ -304,6 +348,9 @@ class OscilloscopeRenderer {
   setColorMode(mode) { this.colorMode = mode; }
   toggleAutoRotate()  { this._autoRotate = !this._autoRotate; }
   setAutoRotate(v)    { this._autoRotate = v; }
+  setTrigger(v)       { this.triggerEnabled = v; }
+  setYScale(v)        { this.yScale = v; }
+  setTimeZoom(v)      { this.timeZoom = Math.max(0.1, Math.min(1, v)); }
   resetCamera()       {
     this._targetSpherical = { theta: 0.3, phi: 0.5, radius: 5.5 };
     this._autoRotate = true;

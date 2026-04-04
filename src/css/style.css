@@ -21,7 +21,7 @@ html, body {
   background: var(--bg);
   color: var(--text);
   font-family: 'Courier New', monospace;
-  font-size: 13px;
+  font-size: 15px;
   overflow: hidden;
 }
 
@@ -51,7 +51,7 @@ html, body {
   z-index: 10;
 }
 #header h1 {
-  font-size: 15px;
+  font-size: 16px;
   letter-spacing: 3px;
   color: var(--accent);
   text-transform: uppercase;
@@ -76,10 +76,10 @@ html, body {
   border: 1px solid var(--border);
   color: var(--text);
   border-radius: var(--radius);
-  padding: 4px 10px;
+  padding: 5px 11px;
   cursor: pointer;
   font-family: inherit;
-  font-size: 12px;
+  font-size: 13px;
   transition: border-color .2s, color .2s;
 }
 .header-btn:hover { border-color: var(--accent); color: var(--accent); }
@@ -101,9 +101,9 @@ html, body {
   position: absolute;
   top: 10px; left: 10px;
   pointer-events: none;
-  font-size: 11px;
+  font-size: 14px;
   color: var(--muted);
-  line-height: 1.7;
+  line-height: 1.8;
 }
 #overlay-hud span { color: var(--accent); }
 
@@ -145,7 +145,7 @@ html, body {
 
 /* ── Shared Widget Styles ─────────────────────────────── */
 .section-title {
-  font-size: 10px;
+  font-size: 12px;
   letter-spacing: 2px;
   text-transform: uppercase;
   color: var(--muted);
@@ -161,8 +161,8 @@ html, body {
   margin-bottom: 4px;
 }
 .control-row label {
-  width: 68px;
-  font-size: 11px;
+  width: 76px;
+  font-size: 13px;
   color: var(--muted);
   flex-shrink: 0;
 }
@@ -172,9 +172,9 @@ html, body {
   cursor: pointer;
 }
 .control-row .val {
-  width: 48px;
+  width: 52px;
   text-align: right;
-  font-size: 11px;
+  font-size: 13px;
   color: var(--accent);
 }
 
@@ -183,9 +183,9 @@ input[type=number], input[type=text], select, textarea {
   border: 1px solid var(--border);
   color: var(--text);
   border-radius: 4px;
-  padding: 3px 6px;
+  padding: 4px 8px;
   font-family: inherit;
-  font-size: 12px;
+  font-size: 14px;
   width: 100%;
 }
 input[type=number]:focus, input[type=text]:focus, select:focus, textarea:focus {
@@ -198,10 +198,10 @@ input[type=number]:focus, input[type=text]:focus, select:focus, textarea:focus {
   border: 1px solid var(--border);
   color: var(--text);
   border-radius: var(--radius);
-  padding: 5px 10px;
+  padding: 7px 12px;
   cursor: pointer;
   font-family: inherit;
-  font-size: 12px;
+  font-size: 14px;
   white-space: nowrap;
   transition: background .2s, border-color .2s, color .2s;
   flex-shrink: 0;
@@ -228,8 +228,8 @@ input[type=number]:focus, input[type=text]:focus, select:focus, textarea:focus {
 
 /* Preset pill buttons */
 .preset-btn {
-  font-size: 11px;
-  padding: 3px 8px;
+  font-size: 12px;
+  padding: 4px 10px;
   border: 1px solid var(--border);
   border-radius: 12px;
   background: none;
@@ -267,9 +267,9 @@ input[type=number]:focus, input[type=text]:focus, select:focus, textarea:focus {
   transition: border-color .2s;
 }
 .signal-item:hover { border-color: var(--accent); }
-.signal-item .sig-name { flex: 1; font-size: 11px; }
-.signal-item .sig-time { font-size: 10px; color: var(--muted); }
-.signal-item .sig-del  { color: var(--red); font-size: 13px; background: none; border: none; cursor: pointer; }
+.signal-item .sig-name { flex: 1; font-size: 12px; }
+.signal-item .sig-time { font-size: 11px; color: var(--muted); }
+.signal-item .sig-del  { color: var(--red); font-size: 14px; background: none; border: none; cursor: pointer; }
 
 /* Message log */
 #msg-log {
@@ -281,7 +281,7 @@ input[type=number]:focus, input[type=text]:focus, select:focus, textarea:focus {
   max-height: 120px;
 }
 .msg-entry {
-  font-size: 11px;
+  font-size: 12px;
   padding: 2px 6px;
   border-left: 2px solid var(--border);
   color: var(--muted);
@@ -355,10 +355,10 @@ input[type=number]:focus, input[type=text]:focus, select:focus, textarea:focus {
   border: 1px solid var(--border);
   color: var(--muted);
   border-radius: var(--radius);
-  padding: 3px 12px;
+  padding: 4px 14px;
   cursor: pointer;
   font-family: inherit;
-  font-size: 12px;
+  font-size: 14px;
   white-space: nowrap;
   transition: all .15s;
   flex-shrink: 0;
@@ -544,8 +544,8 @@ input[type=number]:focus, input[type=text]:focus, select:focus, textarea:focus {
 
 /* ── Pinned sound buttons ─────────────────────────── */
 .pinned-btn {
-  font-size: 11px;
-  padding: 3px 8px;
+  font-size: 12px;
+  padding: 4px 10px;
   border: 1px solid var(--accent2);
   border-radius: 12px;
   background: rgba(255,0,204,.08);
@@ -558,4 +558,32 @@ input[type=number]:focus, input[type=text]:focus, select:focus, textarea:focus {
   gap: 4px;
 }
 .pinned-btn:hover { background: rgba(255,0,204,.2); }
-.pinned-btn .unpin { font-size: 10px; color: var(--muted); background: none; border: none; cursor: pointer; padding: 0 0 0 2px; }
+.pinned-btn .unpin { font-size: 11px; color: var(--muted); background: none; border: none; cursor: pointer; padding: 0 0 0 2px; }
+
+/* ── Android / mobile touch optimisations ────────── */
+@media (max-width: 800px) {
+  /* Larger transport buttons at the bottom */
+  #panel-bottom .btn {
+    font-size: 15px;
+    padding: 10px 14px;
+    min-height: 44px;
+  }
+  /* Bigger wavebar buttons */
+  .wavebar-btn {
+    font-size: 15px;
+    padding: 6px 16px;
+  }
+  /* Larger drawer section labels */
+  .drawer-title {
+    font-size: 13px;
+  }
+  /* Bigger drawer controls */
+  .drawer-col .control-row label {
+    font-size: 14px;
+  }
+  #overlay-hud {
+    font-size: 15px;
+  }
+  /* Mic status text */
+  #mic-status { font-size: 13px; }
+}

@@ -83,6 +83,7 @@ function init() {
   wireMic();
   wireSoundFactory();
   wireSynth();
+  wireSpectrumResize();
 
   se.log('3D Oscilloscope ready', 'info');
   se.log('Click ▶ PLAY to start audio', 'info');
@@ -299,6 +300,11 @@ function wireViewToggles() {
     renderer.toggleAutoRotate();
     e.currentTarget.classList.toggle('active', renderer._autoRotate);
   });
+  $('btn-trig').addEventListener('click', (e) => {
+    if (!renderer) return;
+    renderer.triggerEnabled = !renderer.triggerEnabled;
+    e.currentTarget.classList.toggle('active', renderer.triggerEnabled);
+  });
   $('color-mode').addEventListener('change', (e) => {
     if (!renderer) return;
     renderer.setColorMode(e.target.value);
@@ -393,9 +399,21 @@ function refreshMsgLog() {
 /* ═══════════════════════════════════════════════
    2D SPECTRUM CANVAS
 ═══════════════════════════════════════════════ */
+function wireSpectrumResize() {
+  // Set initial size once
+  canvas2d.width  = canvas2d.offsetWidth  || 200;
+  canvas2d.height = canvas2d.offsetHeight || 60;
+  // Resize only when the element actually changes size (not every frame)
+  const ro = new ResizeObserver(() => {
+    canvas2d.width  = canvas2d.offsetWidth  || 200;
+    canvas2d.height = canvas2d.offsetHeight || 60;
+  });
+  ro.observe(canvas2d);
+}
+
 function drawSpectrum(freqData) {
-  const W = canvas2d.width  = canvas2d.offsetWidth;
-  const H = canvas2d.height = canvas2d.offsetHeight;
+  const W = canvas2d.width;
+  const H = canvas2d.height;
   ctx2d.clearRect(0, 0, W, H);
   ctx2d.fillStyle = '#050510';
   ctx2d.fillRect(0, 0, W, H);
@@ -436,9 +454,10 @@ function renderLoop() {
     }
   }
 
-  // Get audio data
-  const waveData = ae.playing ? ae.getTimeDomainData() : _makeWaveFromSE();
-  const freqData = ae.playing ? ae.getFrequencyData()  : new Uint8Array(512);
+  // Get audio data — prefer real analyser data whenever mic is live or audio playing
+  const liveAudio = ae.playing || mic.monitoring;
+  const waveData = liveAudio ? ae.getTimeDomainData() : _makeWaveFromSE();
+  const freqData = liveAudio ? ae.getFrequencyData()  : new Uint8Array(512);
 
   // Update 3D
   if (renderer) renderer.update(waveData, freqData, se, now);
@@ -632,6 +651,28 @@ function wireDrawer() {
     const valMV = $('val-master-vol');
     if (slMV) { slMV.value = ae.masterVolume; valMV.textContent = ae.masterVolume.toFixed(2); }
   });
+
+  // Y Gain slider → renderer amplitude scale
+  const drYGain = $('dr-ygain');
+  const drValYGain = $('dr-val-ygain');
+  if (drYGain) {
+    drYGain.addEventListener('input', () => {
+      const v = parseFloat(drYGain.value);
+      if (renderer) renderer.setYScale(v);
+      drValYGain.textContent = v.toFixed(1);
+    });
+  }
+
+  // Time Zoom slider → renderer visible window
+  const drTimeZoom = $('dr-timezoom');
+  const drValTimeZoom = $('dr-val-timezoom');
+  if (drTimeZoom) {
+    drTimeZoom.addEventListener('input', () => {
+      const v = parseFloat(drTimeZoom.value);
+      if (renderer) renderer.setTimeZoom(v);
+      drValTimeZoom.textContent = Math.round(v * 100) + '%';
+    });
+  }
 }
 
 /* ═══════════════════════════════════════════════
@@ -702,6 +743,18 @@ function wirePiano() {
   piano.init(ae);
   _buildPianoKeys(_pianoOctave);
   $('piano-oct-label').textContent = `Oct ${_pianoOctave}–${_pianoOctave+1}`;
+
+  // Piano section collapse/expand toggle
+  const btnPianoToggle = $('btn-piano-toggle');
+  const pianoSection   = $('piano-section');
+  let _pianoVisible = true;
+  if (btnPianoToggle && pianoSection) {
+    btnPianoToggle.addEventListener('click', () => {
+      _pianoVisible = !_pianoVisible;
+      pianoSection.style.display = _pianoVisible ? '' : 'none';
+      btnPianoToggle.textContent = _pianoVisible ? '▼ HIDE' : '▶ SHOW';
+    });
+  }
 
   $('btn-oct-down').addEventListener('click', () => {
     if (_pianoOctave > 1) { _pianoOctave--; _buildPianoKeys(_pianoOctave); $('piano-oct-label').textContent = `Oct ${_pianoOctave}–${_pianoOctave+1}`; }
